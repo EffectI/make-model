@@ -1,7 +1,7 @@
+![Python](https://img.shields.io/badge/Python-3.10%2B-blue) ![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-orange) ![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-yellow) ![License](https://img.shields.io/badge/License-MIT-green)
 ````markdown
 # 🤖 AI-Text-Classifier (Lightweight Model Project)
 
-![Python](https://img.shields.io/badge/Python-3.10%2B-blue) ![PyTorch](https://img.shields.io/badge/PyTorch-2.0%2B-orange) ![HuggingFace](https://img.shields.io/badge/%F0%9F%A4%97-Hugging%20Face-yellow) ![License](https://img.shields.io/badge/License-MIT-green)
 
 ## 📖 개요 (Overview)
 
