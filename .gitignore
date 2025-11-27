@@ -17,3 +17,5 @@ Thumbs.db
 Desktop.ini
 
 .ipynb_checkpoints/
+
+*.csv
