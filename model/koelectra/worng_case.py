@@ -23,10 +23,7 @@ MAX_LEN = 512
 # [함수] 문장 분리 및 추론
 # ==========================================
 def split_sentences(text):
-    """
-    간단한 문장 분리 함수 (한국어 특성 고려)
-    . ? ! 뒤에 공백이 오면 자릅니다.
-    """
+    #? ! 뒤에 공백이 오면 자름
     # 문장 끝 부호 뒤에 공백이 있는 경우 분리
     sentences = re.split(r'(?<=[.?!])\s+', text)
     return [s for s in sentences if len(s.strip()) > 5] # 너무 짧은 문장 제외
@@ -34,7 +31,7 @@ def split_sentences(text):
 def analyze_sentences():
     # 1. 데이터 및 모델 로드
     if not ERROR_FILE_PATH.exists():
-        print("❌ 오답 파일이 없습니다. 이전 코드를 먼저 실행해주세요.")
+        print("오답 파일이 없습니다. 이전 코드를 먼저 실행해주세요.")
         print(f"   찾는 경로: {ERROR_FILE_PATH}")
         return
 
@@ -99,16 +96,16 @@ def analyze_sentences():
     result_df.to_csv(save_path, index=False, encoding='utf-8-sig')
 
     print("\n" + "="*50)
-    print(f"💾 분석 완료! 저장 경로: {save_path}")
+    print(f"분석 완료 저장 경로: {save_path}")
     print("="*50)
 
     # 상위 3개 미리보기
-    print("\n[👀 가장 강력한 '범인 문장' TOP 3]")
+    print("\n[TOP 3 sentences likely to be AI-generated]")
     for i in range(min(3, len(result_df))):
         row = result_df.iloc[i]
-        print(f"\n🥇 {i+1}위 (AI 확률: {row['max_prob_ai']:.4f})")
-        print(f"   📝 문장: \"{row['culprit_sentence']}\"")
-        print(f"   🔍 원본ID: {row['id']}")
+        print(f"\n{i+1}위 (AI 확률: {row['max_prob_ai']:.4f})")
+        print(f"   문장: \"{row['culprit_sentence']}\"")
+        print(f"   원본ID: {row['id']}")
 
 if __name__ == "__main__":
     analyze_sentences()
