@@ -19,3 +19,26 @@ Desktop.ini
 .ipynb_checkpoints/
 
 *.csv
+make-model/model/result_models/
+*.json
+*.safetensors
+*.txt
+*.bin
+submission*.csv
+*_predictions.csv
+*.pt
+*.pth
+
+__pycache__/
+*.pyc
+pytorch_env/
+venv/
+env/
+.env
+
+*:Zone.Identifier
+
+.vscode/
+.idea/
+
+.DS_Store
