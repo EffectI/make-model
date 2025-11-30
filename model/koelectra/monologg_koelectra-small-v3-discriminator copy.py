@@ -26,7 +26,6 @@ warnings.filterwarnings('ignore')
 
 # 1. 경로 설정
 DATA_ROOT_DIR = 'make-model/data/fold'
-# 변경: 모델 이름에 맞춰 결과 저장 경로 수정
 OUTPUT_ROOT_DIR = 'make-model/model/result_models/koelectra_small'
 
 # 2. 파일명 설정
