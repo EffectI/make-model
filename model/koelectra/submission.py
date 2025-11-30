@@ -10,9 +10,9 @@ from transformers import AutoTokenizer, AutoModelForSequenceClassification
 # ==========================================
 # [1] 설정
 # ==========================================
-TEST_FILE_PATH = '/home/user/rocm_project/make-model/data/raw/test.csv'
-MODEL_ROOT_DIR = '/home/user/rocm_project/make-model/model/result_models/koelectra_small'
-OUTPUT_SUBMISSION_PATH = './submission_ensemble.csv'
+TEST_FILE_PATH = 'make-model/data/raw/test.csv'  # 실제 테스트 파일 경로로 수정하세요
+MODEL_ROOT_DIR = 'make-model/model/result_models/koelectra_small'
+OUTPUT_SUBMISSION_PATH = 'make-model/temp_submission/submission_koelectra.csv'
 
 N_FOLDS = 4
 BATCH_SIZE = 64
@@ -51,7 +51,7 @@ class TestDataset(Dataset):
         }
 
 # ==========================================
-# [3] 추론 함수 (수정됨: Tuple/Logits 호환)
+# [3] 추론 함수
 # ==========================================
 def inference(model_path, test_loader):
     print(f"   Derived from: {model_path}")
@@ -70,15 +70,13 @@ def inference(model_path, test_loader):
             
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
             
-            # -----------------------------------------------------------
-            # [Fix] 출력이 Tuple인 경우와 Object인 경우 모두 처리
-            # -----------------------------------------------------------
+            # Logits 추출
             if hasattr(outputs, 'logits'):
                 logits = outputs.logits
             else:
-                logits = outputs[0]  # Tuple인 경우 첫 번째 요소가 logits
+                logits = outputs[0]
             
-            # Softmax: Logits -> Probability
+            # Softmax: Logits -> Probability (확률값 변환)
             probs = torch.nn.functional.softmax(logits, dim=-1)
             predictions.append(probs.cpu().numpy())
             
@@ -111,6 +109,7 @@ def main():
     if text_col:
         test_df.rename(columns={text_col: 'text'}, inplace=True)
     else:
+        # 텍스트 컬럼을 못 찾으면 object 타입 첫 번째 컬럼 사용
         obj_cols = test_df.select_dtypes(include=['object']).columns
         if len(obj_cols) > 0:
             test_df.rename(columns={obj_cols[0]: 'text'}, inplace=True)
@@ -118,26 +117,26 @@ def main():
             print("❌ [Critical] 텍스트 컬럼을 찾을 수 없습니다.")
             return
 
-    # (2) ID 컬럼 찾기
-    input_id_col = None
+    # (2) ID 컬럼 찾기 (submission 파일용)
+    input_id_col = 'id' # 기본값
     id_candidates = ['id', 'ID', 'idx', 'index', 'no']
     for col in test_df.columns:
         if col in id_candidates: 
             input_id_col = col
             break
     
-    # 2. 토크나이저 준비
+    # 2. 토크나이저 준비 (Fold 0번 모델이나 기본 모델 사용)
     first_fold_path = os.path.join(MODEL_ROOT_DIR, "fold0")
     try:
         base_tokenizer = AutoTokenizer.from_pretrained(first_fold_path)
     except:
-        print("⚠️ 로컬 토크나이저 로드 실패. HuggingFace Hub(KoElectra)에서 로드 시도.")
+        print("⚠️ 로컬 토크나이저 로드 실패. HuggingFace Hub에서 로드 시도.")
         base_tokenizer = AutoTokenizer.from_pretrained("monologg/koelectra-small-v3-discriminator")
 
     test_dataset = TestDataset(test_df, base_tokenizer, MAX_LEN)
     test_loader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=False, num_workers=2)
 
-    # 3. 4-Fold 앙상블
+    # 3. 4-Fold 앙상블 (확률값 누적)
     final_probs = np.zeros((len(test_df), 2))
     success_folds = 0
 
@@ -160,18 +159,23 @@ def main():
         print("❌ 모든 Fold 추론 실패.")
         return
 
-    # 4. 결과 저장
+    # 4. 결과 저장 (확률값 평균)
     avg_probs = final_probs / success_folds
-    final_preds = np.argmax(avg_probs, axis=1)
+    
+    # [핵심 수정] 0과 1이 아닌, Class 1(AI Generated)일 확률값만 추출
+    # avg_probs[:, 0]은 사람일 확률, avg_probs[:, 1]은 AI일 확률
+    prob_generated = avg_probs[:, 1]
 
     submission = pd.DataFrame()
     
-    if input_id_col:
-        submission['ID'] = test_df[input_id_col]
+    # ID 컬럼 보존
+    if input_id_col in test_df.columns:
+        submission[input_id_col] = test_df[input_id_col]
     else:
-        submission['ID'] = test_df.index
+        submission['id'] = test_df.index
 
-    submission['generated'] = final_preds
+    # 확률값 저장 (예: 0.91234)
+    submission['generated'] = prob_generated
 
     submission.to_csv(OUTPUT_SUBMISSION_PATH, index=False)
     print(f"\n✅ Submission Saved: {OUTPUT_SUBMISSION_PATH}")
