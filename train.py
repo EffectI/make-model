@@ -45,7 +45,6 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    # 기본값으로 방금 만든 yaml 파일 지정
     parser.add_argument('--config', type=str, default='config/koelectra_sliding.yaml', help='Path to config file')
     args = parser.parse_args()
     
