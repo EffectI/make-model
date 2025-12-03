@@ -7,8 +7,6 @@ import warnings
 import gc
 import csv
 import random
-import shutil
-from tqdm import tqdm
 from sklearn.metrics import f1_score, accuracy_score
 from transformers import (
     AutoTokenizer,
@@ -16,44 +14,38 @@ from transformers import (
     TrainingArguments,
     Trainer,
     DataCollatorWithPadding,
-    TrainerCallback
+    EarlyStoppingCallback
 )
 from datasets import Dataset
 
+
 warnings.filterwarnings('ignore')
 
-# ==========================================
+# =========================
 # [1] 설정 및 하이퍼파라미터
-# ==========================================
+# =========================
 
-# 경로 설정
 DATA_ROOT_DIR = 'make-model/data/fold'
-OUTPUT_ROOT_DIR = 'make-model/model/result_models/koelectra_small_sliding_early_stopping'
+OUTPUT_ROOT_DIR = 'make-model/model/result_models/koelectra_small_sliding'
 
-# 파일명 설정
-TRAIN_FILENAME = 'balanced_train.csv'
-VALID_FILENAME = 'balanced_valid.csv'
 TEST_FILENAME = 'local_balanced_test.csv'
+TRAIN_FILENAME = 'balanced_train.csv' # 또는 cleaned_train.csv
+VALID_FILENAME = 'balanced_valid.csv'
 
-# 학습 설정
 N_FOLDS = 4
 FOLD_DIR_PREFIX = 'fold'
 MODEL_NAME = "monologg/koelectra-small-v3-discriminator"
 
-# Sliding Window 설정
+# 슬라이딩 윈도우 설정
 MAX_LEN = 512
-STRIDE = 256
+STRIDE = 256 
 
-# 하이퍼파라미터
-BATCH_SIZE = 32
+BATCH_SIZE = 32 
 EPOCHS = 10
 LEARNING_RATE = 3e-5
+PATIENCE = 3
 SEED = 42
-LABEL_SMOOTHING = 0.1
-MAX_POOLING_THRESHOLD = 0.5 
-PATIENCE = 3 
 
-# CSV 로드 설정
 detected_delimiter = ','
 detected_quotechar = '"'
 
@@ -80,7 +72,7 @@ def find_column_name(columns, candidates):
 
 def load_and_fix_data(path, is_test=False):
     if not os.path.exists(path):
-        print(f" [Warning] File not found: {path}")
+        print(f"파일이 없습니다: {path}")
         return None
 
     df = None
@@ -114,290 +106,181 @@ def load_and_fix_data(path, is_test=False):
         if id_col: df.rename(columns={id_col: 'id'}, inplace=True)
         else: df['id'] = df.index
 
-    target_candidates = ['generated', 'label', 'target', 'class']
-    target_col = find_column_name(df.columns, target_candidates)
-    if target_col:
-        df.rename(columns={target_col: 'label'}, inplace=True)
-        try: df['label'] = df['label'].astype(int)
-        except: pass
-    elif not is_test:
-        return None
+    if not is_test:
+        target_candidates = ['generated', 'label', 'target', 'class']
+        target_col = find_column_name(df.columns, target_candidates)
+        if target_col:
+            df.rename(columns={target_col: 'label'}, inplace=True)
+            try: df['label'] = df['label'].astype(int)
+            except: pass
+        else: return None
 
+    # 결측치 제거
     df = df.dropna(subset=['text'])
+    # 텍스트 문자열 변환
     df['text'] = df['text'].astype(str)
     
     return df
 
-# ==========================================
-# [3] 문서 단위 검증 함수 (Max Pooling)
-# ==========================================
-def evaluate_document_level(model, df, tokenizer, device, desc="Eval"):
-    """
-    Validation/Test 단계에서 호출.
-    데이터프레임을 순회하며 Sliding Window -> Max Pooling 수행 후 Metric 반환
-    """
-    model.eval()
-    preds = []
-    labels = []
-    
-    with torch.no_grad():
-        iterator = tqdm(df.iterrows(), total=len(df), leave=False, desc=desc)
-        
-        for idx, row in iterator:
-            text = str(row['text'])
-            label = int(row['label']) if 'label' in row else -1
-            
-            inputs = tokenizer(
-                text, 
-                return_tensors="pt", 
-                max_length=MAX_LEN, 
-                stride=STRIDE, 
-                truncation=True, 
-                padding="max_length", 
-                return_overflowing_tokens=True
-            )
-            
-            input_ids = inputs["input_ids"].to(device)
-            attention_mask = inputs["attention_mask"].to(device)
-            
-            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
-            logits = outputs.logits
-            probs = torch.nn.functional.softmax(logits, dim=-1)
-            
-            max_ai_prob = torch.max(probs[:, 1]).item()
-            pred_label = 1 if max_ai_prob > MAX_POOLING_THRESHOLD else 0
-            
-            preds.append(pred_label)
-            labels.append(label)
-            
-    if -1 not in labels:
-        acc = accuracy_score(labels, preds)
-        f1 = f1_score(labels, preds, average='macro')
-        return acc, f1
-    else:
-        return 0.0, 0.0
+def compute_metrics(p):
+    # 주의: 여기서 계산되는 Accuracy는 'Chunk(조각)' 단위의 정확도입니다.
+    # 전체 문서 단위 정확도와는 다를 수 있습니다.
+    preds = np.argmax(p.predictions, axis=1)
+    labels = p.label_ids
+    acc = accuracy_score(labels, preds)
+    f1 = f1_score(labels, preds, average='macro')
+    return {"accuracy": acc, "f1": f1}
 
 # ==========================================
-# [4] Custom Callback Class (Early Stopping 추가)
+# [3] 메인 학습 루프
 # ==========================================
-class DocumentLevelEarlyStoppingCallback(TrainerCallback):
 
-    def __init__(self, val_df, tokenizer, device, save_dir, patience=3):
-        self.val_df = val_df
-        self.tokenizer = tokenizer
-        self.device = device
-        self.save_dir = save_dir
-        
-        self.best_doc_f1 = 0.0
-        self.best_model_path = os.path.join(save_dir, "best_doc_model")
-        
-        # Early Stopping 변수
-        self.patience = patience
-        self.counter = 0
-
-    def on_epoch_end(self, args, state, control, model=None, **kwargs):
-        # 문서 단위 평가 수행
-        acc, f1 = evaluate_document_level(
-            model, self.val_df, self.tokenizer, self.device, desc="Validating(Doc)"
-        )
-        
-        print(f"\n[Epoch {state.epoch:.0f}] Document Level Valid -> Acc: {acc:.4f}, F1: {f1:.4f}")
-        
-        # Best Model 갱신 여부 체크
-        if f1 > self.best_doc_f1:
-            print(f" *** New Best Document F1! ({self.best_doc_f1:.4f} -> {f1:.4f}) Saving model...")
-            self.best_doc_f1 = f1
-            self.counter = 0 # 성능 향상 시 카운터 초기화
-            
-            if not os.path.exists(self.best_model_path):
-                os.makedirs(self.best_model_path)
-            
-            model.save_pretrained(self.best_model_path)
-            self.tokenizer.save_pretrained(self.best_model_path)
-        else:
-            self.counter += 1
-            print(f" (No Improvement. Current Best: {self.best_doc_f1:.4f} | Patience: {self.counter}/{self.patience})")
-            
-            # Early Stopping 조건 달성 시
-            if self.counter >= self.patience:
-                print(f" [Early Stopping] Triggered! Training stopped at epoch {state.epoch:.0f}.")
-                control.should_training_stop = True
-
-# ==========================================
-# [5] 메인 프로세스
-# ==========================================
 def run_kfold_process():
     set_seeds(SEED)
     torch.cuda.empty_cache()
     gc.collect()
 
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    print(f"\n[{MODEL_NAME}] {N_FOLDS}-Fold Training with Custom Early Stopping")
+    print(f"\n[{MODEL_NAME}] {N_FOLDS}-Fold Sliding Window 학습 시작")
+    print(f"Data Root: {DATA_ROOT_DIR}")
+    print(f"Output Root: {OUTPUT_ROOT_DIR}")
 
     tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
 
+    # ----------------------------------------------------------------
+    # [핵심 함수] 슬라이딩 윈도우 전처리
+    # 하나의 긴 텍스트를 여러 개의 샘플로 쪼개고, 라벨을 복사합니다.
+    # ----------------------------------------------------------------
     def preprocess_sliding_window(examples):
         tokenized_inputs = tokenizer(
             examples["text"],
             truncation=True,
             max_length=MAX_LEN,
-            stride=STRIDE,
-            return_overflowing_tokens=True,
-            padding="max_length"
+            stride=STRIDE,                  # 겹치는 구간 설정
+            return_overflowing_tokens=True, # 긴 문서를 여러 개로 쪼개서 반환
+            padding="max_length"            # 배치 처리를 위해 패딩
         )
+
+        # 쪼개진 조각들이 원래 어떤 샘플(문서)에서 왔는지 매핑 정보
         sample_map = tokenized_inputs.pop("overflow_to_sample_mapping")
+        
+        # 라벨 복사 작업
         labels = []
         for i in range(len(tokenized_inputs["input_ids"])):
-            labels.append(examples["label"][sample_map[i]])
+            # 현재 조각(chunk)이 유래한 원본 문서의 인덱스
+            sample_idx = sample_map[i]
+            # 원본 문서의 라벨을 가져와서 현재 조각에 부여
+            labels.append(examples["label"][sample_idx])
+            
         tokenized_inputs["label"] = labels
         return tokenized_inputs
 
-    all_fold_val_metrics = []
-    all_fold_test_metrics = []
+    # Test 데이터 로드 (평가용) - Test도 윈도우 방식으로 자릅니다.
+    # (실제 추론 시에는 Max Pooling을 해야 하지만, 학습 중 Metric 확인용으로는 Chunk 단위 평가를 수행합니다)
+    test_file_path = os.path.join(DATA_ROOT_DIR, TEST_FILENAME)
+    test_df = load_and_fix_data(test_file_path, is_test=False) # 학습 중 평가를 위해 라벨이 있는 Test셋 사용 가정
+    
+    if test_df is not None:
+        test_ds = Dataset.from_pandas(test_df[['text', 'label']])
+        # batched=True와 remove_columns가 필수입니다. (입력 행 수 != 출력 행 수 이기 때문)
+        encoded_test = test_ds.map(
+            preprocess_sliding_window, 
+            batched=True, 
+            remove_columns=test_ds.column_names
+        )
+        print(f"Test Set Expanded: {len(test_df)} docs -> {len(encoded_test)} chunks")
+    else:
+        encoded_test = None
+
+    all_fold_metrics = []
 
     for fold_idx in range(N_FOLDS):
-        print(f"\n" + "="*50)
+        print(f"\n" + "="*40)
         print(f" >>> [FOLD {fold_idx}] Start Training")
-        print("="*50)
+        print("="*40)
 
         current_fold_dir = os.path.join(DATA_ROOT_DIR, f"{FOLD_DIR_PREFIX}{fold_idx}")
         train_path = os.path.join(current_fold_dir, TRAIN_FILENAME)
         val_path = os.path.join(current_fold_dir, VALID_FILENAME)
-        test_path = os.path.join(current_fold_dir, TEST_FILENAME)
         fold_output_dir = os.path.join(OUTPUT_ROOT_DIR, f"{FOLD_DIR_PREFIX}{fold_idx}")
 
         train_df = load_and_fix_data(train_path)
-        val_df = load_and_fix_data(val_path)       
-        test_df = load_and_fix_data(test_path, is_test=False)
+        val_df = load_and_fix_data(val_path)
 
         if train_df is None or val_df is None:
             continue
 
         train_ds = Dataset.from_pandas(train_df[['text', 'label']])
-        val_ds = Dataset.from_pandas(val_df[['text', 'label']]) 
+        val_ds = Dataset.from_pandas(val_df[['text', 'label']])
 
-        print("   Processing Tokenization...")
-        encoded_train = train_ds.map(preprocess_sliding_window, batched=True, remove_columns=train_ds.column_names)
-        encoded_val = val_ds.map(preprocess_sliding_window, batched=True, remove_columns=val_ds.column_names)
-
-        model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=2)
-        model.to(device)
-
-        # Callback 초기화 (Patience 전달)
-        doc_early_stopping_callback = DocumentLevelEarlyStoppingCallback(
-            val_df=val_df,
-            tokenizer=tokenizer,
-            device=device,
-            save_dir=fold_output_dir,
-            patience=PATIENCE # Global 설정값 사용
+        # ========================================================
+        # remove_columns를 반드시 해서 원본 텍스트 컬럼을 날려야 함
+        # ========================================================
+        print("   Applying Sliding Window Tokenization...")
+        encoded_train = train_ds.map(
+            preprocess_sliding_window, 
+            batched=True, 
+            remove_columns=train_ds.column_names
         )
+        encoded_val = val_ds.map(
+            preprocess_sliding_window, 
+            batched=True, 
+            remove_columns=val_ds.column_names
+        )
+        
+        print(f"   Train: {len(train_df)} -> {len(encoded_train)} chunks")
+        print(f"   Valid: {len(val_df)} -> {len(encoded_val)} chunks")
+
+        # 모델 초기화
+        model = AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=2)
+        
+
 
         args = TrainingArguments(
+            label_smoothing_factor=0.1,
             output_dir=fold_output_dir,
-            eval_strategy="no",         
-            save_strategy="no",         
+            eval_strategy="epoch",
+            save_strategy="epoch",
             learning_rate=LEARNING_RATE,
             per_device_train_batch_size=BATCH_SIZE,
             per_device_eval_batch_size=BATCH_SIZE,
             num_train_epochs=EPOCHS,
             weight_decay=0.01,
-            label_smoothing_factor=LABEL_SMOOTHING,
             fp16=True,
+            load_best_model_at_end=True,
+            metric_for_best_model="f1",
+            greater_is_better=True,
+            save_total_limit=1,
             report_to="none",
-            seed=SEED,
-            load_best_model_at_end=False 
+            seed=SEED
         )
 
         trainer = Trainer(
-            model=model,
-            args=args,
-            train_dataset=encoded_train,
-            eval_dataset=encoded_val, 
-            tokenizer=tokenizer,
-            data_collator=DataCollatorWithPadding(tokenizer),
-            callbacks=[doc_early_stopping_callback] # Early Stopping Callback 등록
+            model=model, args=args,
+            train_dataset=encoded_train, eval_dataset=encoded_val,
+            tokenizer=tokenizer, data_collator=DataCollatorWithPadding(tokenizer),
+            compute_metrics=compute_metrics,
+            callbacks=[EarlyStoppingCallback(early_stopping_patience=PATIENCE)]
         )
 
         trainer.train()
+        
+        trainer.save_model(fold_output_dir)
+        tokenizer.save_pretrained(fold_output_dir)
 
-        # ---------------------------------------------------------
-        # [최종 검증] Best Model Load & Test Eval
-        # ---------------------------------------------------------
-        print(f"\n>>> [Fold {fold_idx}] Loading Best Document-Level Model...")
-        best_model_path = os.path.join(fold_output_dir, "best_doc_model")
-
-        if os.path.exists(best_model_path):
-            best_model = AutoModelForSequenceClassification.from_pretrained(best_model_path)
-            best_model.to(device)
-            
-            val_acc, val_f1 = evaluate_document_level(best_model, val_df, tokenizer, device, desc="Final Valid")
-            all_fold_val_metrics.append({"accuracy": val_acc, "f1": val_f1})
-            print(f"       Valid Doc Acc: {val_acc:.4f} | Valid Doc F1: {val_f1:.4f}")
-
-            if test_df is not None:
-                test_acc, test_f1 = evaluate_document_level(best_model, test_df, tokenizer, device, desc="Final Test")
-                all_fold_test_metrics.append({"accuracy": test_acc, "f1": test_f1})
-                print(f"       Test Doc Acc : {test_acc:.4f} | Test Doc F1 : {test_f1:.4f}")
-            else:
-                print("       Test data not found.")
-                all_fold_test_metrics.append({"accuracy": 0.0, "f1": 0.0})
-                
-            del best_model
-        else:
-            print(" [Error] Best model not found. Training might have failed.")
-            all_fold_val_metrics.append({"accuracy": 0.0, "f1": 0.0})
-            all_fold_test_metrics.append({"accuracy": 0.0, "f1": 0.0})
+        # 평가 (Chunk 단위 평가임에 유의)
+        if encoded_test:
+            metrics = trainer.evaluate(encoded_test)
+            print(f"    Chunk-level Result: {metrics}")
+            all_fold_metrics.append(metrics)
 
         del model, trainer
         torch.cuda.empty_cache()
         gc.collect()
 
-    # ==========================================
-    # [6] 최종 결과 요약
-    # ==========================================
-    print("\n" + "#"*65)
-    print(" [K-Fold Final Summary: Sliding Window + Max Pooling (Early Stopping)]")
-    print("#"*65)
-    print(f"{'Fold':^6} | {'Valid Acc':^12} | {'Valid F1':^12} || {'Test Acc':^12} | {'Test F1':^12}")
-    print("-" * 65)
-
-    avg_val_acc = 0; avg_val_f1 = 0
-    avg_test_acc = 0; avg_test_f1 = 0
-    valid_count = 0; test_count = 0
-
-    for i in range(len(all_fold_val_metrics)):
-        v_acc = all_fold_val_metrics[i]['accuracy']
-        v_f1 = all_fold_val_metrics[i]['f1']
-        t_acc = all_fold_test_metrics[i]['accuracy']
-        t_f1 = all_fold_test_metrics[i]['f1']
-        
-        t_str_acc = f"{t_acc:.4f}" if t_acc > 0 else "-"
-        t_str_f1 = f"{t_f1:.4f}" if t_acc > 0 else "-"
-
-        print(f"{i:^6} | {v_acc:^12.4f} | {v_f1:^12.4f} || {t_str_acc:^12} | {t_str_f1:^12}")
-
-        if v_acc > 0:
-            avg_val_acc += v_acc
-            avg_val_f1 += v_f1
-            valid_count += 1
-        
-        if t_acc > 0:
-            avg_test_acc += t_acc
-            avg_test_f1 += t_f1
-            test_count += 1
-
-    print("-" * 65)
-    
-    val_res_acc = avg_val_acc/valid_count if valid_count > 0 else 0
-    val_res_f1 = avg_val_f1/valid_count if valid_count > 0 else 0
-    
-    print(f"{'AVG':^6} | {val_res_acc:^12.4f} | {val_res_f1:^12.4f} || ", end="")
-        
-    if test_count > 0:
-        print(f"{avg_test_acc/test_count:^12.4f} | {avg_test_f1/test_count:^12.4f}")
-    else:
-        print(f"{'-':^12} | {'-':^12}")
-    print("#"*65)
+    print("\n" + "#"*50)
+    print(" [K-Fold Training Summary]")
+    print("#"*50)
+    # 생략 (Chunk 레벨 결과 평균 출력)  
 
 if __name__ == "__main__":
     if torch.cuda.is_available():
