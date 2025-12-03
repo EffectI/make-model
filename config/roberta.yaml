@@ -1,3 +1,5 @@
+# config/roberta.yaml
+
 project:
   name: "roberta-small-sliding"
   seed: 42
@@ -11,6 +13,11 @@ data:
   val_size: 0.2
   delimiter: ","
   quotechar: '"'
+
+predict:
+  test_path: "make-model/data/raw/test.csv"
+  submission_dir: "make-model/experiments/temp_submission"
+  submission_file: "submission_roberta.csv"
 
 model:
   name: "klue/roberta-small" 

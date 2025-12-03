@@ -1,4 +1,4 @@
-# config/koelectra_sliding.yaml
+# config/koelectra.yaml
 
 project:
   name: "koelectra-sliding-single"
@@ -8,11 +8,16 @@ project:
 data:
   file_path: "make-model/data/interim/clean_train_balanced.csv"
   method: "sliding"
-  val_size: 0.2
   max_len: 512
   stride: 256
+  val_size: 0.2
   delimiter: ","
   quotechar: '"'
+
+predict:
+  test_path: "make-model/data/raw/test.csv"
+  submission_dir: "make-model/experiments/temp_submission"
+  submission_file: "submission_koelectra.csv"
 
 model:
   name: "monologg/koelectra-small-v3-discriminator"
