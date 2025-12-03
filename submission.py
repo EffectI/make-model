@@ -12,13 +12,13 @@ from tqdm import tqdm
 # =========================
 
 # 학습된 모델이 저장된 경로
-MODEL_DIR = 'make-model/model/result_models/koelectra_small_sliding_single'
+MODEL_DIR = 'make-model/experiment/koelectra_small_sliding_single'
 
 # 테스트 데이터 경로
 TEST_DATA_PATH = 'make-model/data/raw/test.csv'
 
 # 결과 저장 경로
-SUBMISSION_PATH = 'make-model/temp_submission/submission.csv'
+SUBMISSION_PATH = 'make-model/experiments/temp_submission/submission.csv'
 
 # 하이퍼파라미터
 MAX_LEN = 512
