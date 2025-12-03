@@ -1,0 +1,26 @@
+project:
+  name: "roberta-small-sliding"
+  seed: 42
+  output_dir: "make-model/experiments/roberta_small_sliding_single"
+
+data:
+  file_path: "make-model/data/interim/clean_train_balanced.csv"
+  method: "sliding" 
+  max_len: 512
+  stride: 256
+  val_size: 0.2
+  delimiter: ","
+  quotechar: '"'
+
+model:
+  name: "klue/roberta-small" 
+  num_labels: 2
+
+train:
+  batch_size: 32 
+  epochs: 10
+  learning_rate: 5.0e-5 
+  patience: 3
+  weight_decay: 0.01
+  label_smoothing: 0.1
+  fp16: true
