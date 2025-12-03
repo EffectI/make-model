@@ -29,7 +29,7 @@ DATA_ROOT_DIR = 'make-model/data/fold'
 OUTPUT_ROOT_DIR = 'make-model/model/result_models/koelectra_small_sliding'
 
 TEST_FILENAME = 'local_balanced_test.csv'
-TRAIN_FILENAME = 'balanced_train.csv' # 또는 cleaned_train.csv
+TRAIN_FILENAME = 'balanced_train.csv'
 VALID_FILENAME = 'balanced_valid.csv'
 
 N_FOLDS = 4
