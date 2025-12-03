@@ -28,6 +28,7 @@ submission*.csv
 *_predictions.csv
 *.pt
 *.pth
+*.zip
 
 __pycache__/
 *.pyc
