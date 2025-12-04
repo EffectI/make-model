@@ -2,6 +2,12 @@
 from transformers import TrainingArguments, Trainer, DataCollatorWithPadding, EarlyStoppingCallback
 from src.utils import compute_metrics
 
+def preprocess_logits_for_metrics(logits, labels):
+    if isinstance(logits, tuple):
+        return logits[0]
+    return logits
+
+
 def get_trainer(model, tokenizer, train_ds, val_ds, cfg):
     args = TrainingArguments(
         output_dir=cfg['project']['output_dir'],
@@ -27,7 +33,7 @@ def get_trainer(model, tokenizer, train_ds, val_ds, cfg):
         args=args,
         train_dataset=train_ds,
         eval_dataset=val_ds,
-        tokenizer=tokenizer,
+        processing_class=tokenizer,
         data_collator=DataCollatorWithPadding(tokenizer),
         compute_metrics=compute_metrics,
         callbacks=[EarlyStoppingCallback(early_stopping_patience=cfg['train']['patience'])]

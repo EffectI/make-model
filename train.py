@@ -27,7 +27,7 @@ def main(args):
     # 5. Initialize Trainer
     trainer = get_trainer(model, tokenizer, train_ds, val_ds, cfg)
 
-    # 6. Train
+    # 6. Train6
     trainer.train()
 
     # 7. Save & Evaluate
@@ -45,7 +45,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='config/koelectra_sliding.yaml', help='Path to config file')
+    parser.add_argument('--config', type=str, default='make-model/config/roberta.yaml', help='Path to config file')
     args = parser.parse_args()
     
     if torch.cuda.is_available():
