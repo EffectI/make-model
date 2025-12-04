@@ -3,9 +3,11 @@ from transformers import TrainingArguments, Trainer, DataCollatorWithPadding, Ea
 from src.utils import compute_metrics
 
 def preprocess_logits_for_metrics(logits, labels):
+
     if isinstance(logits, tuple):
-        return logits[0]
-    return logits
+        logits = logits[0]
+    
+    return logits.argmax(dim=-1)
 
 
 def get_trainer(model, tokenizer, train_ds, val_ds, cfg):
@@ -36,6 +38,7 @@ def get_trainer(model, tokenizer, train_ds, val_ds, cfg):
         processing_class=tokenizer,
         data_collator=DataCollatorWithPadding(tokenizer),
         compute_metrics=compute_metrics,
+        preprocess_logits_for_metrics=preprocess_logits_for_metrics,
         callbacks=[EarlyStoppingCallback(early_stopping_patience=cfg['train']['patience'])]
     )
     

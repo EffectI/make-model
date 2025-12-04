@@ -2,7 +2,7 @@ import os
 import random
 import numpy as np
 import torch
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from sklearn.metrics import accuracy_score, f1_score
 
 def set_seeds(seed=42):
     os.environ['PYTHONHASHSEED'] = str(seed)
@@ -17,34 +17,32 @@ def set_seeds(seed=42):
 
 def compute_metrics(p):
     predictions = p.predictions
-    labels = p.label_ids
+    label_ids = p.label_ids
+
+    print(f"\n[Debug] Type: {type(predictions)}")
+    if isinstance(predictions, tuple):
+        print(f"[Debug] Tuple Length: {len(predictions)}")
+    elif isinstance(predictions, np.ndarray):
+        print(f"[Debug] Array Shape: {predictions.shape}")
 
     if isinstance(predictions, tuple):
         if len(predictions) > 0:
             predictions = predictions[0]
         else:
-            print("Warning: Empty predictions tuple received. Returning 0 metrics.")
-            return {
-                'accuracy': 0.0,
-                'f1': 0.0,
-                'precision': 0.0,
-                'recall': 0.0
-            }
+            print("Warning: 빈 튜플이 들어왔습니다. 예측값이 없습니다.")
+            return {"accuracy": 0.0, "f1": 0.0}
 
-    if not isinstance(predictions, np.ndarray):
-        predictions = np.array(predictions)
+    predictions = np.array(predictions)
 
-    if len(predictions.shape) == 1:
-        preds = np.array([1 if x > 0.5 else 0 for x in predictions])
-    else:
+    if predictions.ndim > 1:
         preds = np.argmax(predictions, axis=1)
+    else:
+        preds = (predictions > 0).astype(int)
 
-    precision, recall, f1, _ = precision_recall_fscore_support(labels, preds, average='binary')
-    acc = accuracy_score(labels, preds)
-
+    acc = accuracy_score(label_ids, preds)
+    f1 = f1_score(label_ids, preds, average='macro') 
+    
     return {
         'accuracy': acc,
-        'f1': f1,
-        'precision': precision,
-        'recall': recall
+        'f1': f1
     }

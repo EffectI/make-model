@@ -3,7 +3,7 @@
 project:
   name: "koelectra-sliding-single"
   seed: 42
-  output_dir: "make-model/experiments/koelectra_small_sliding_single"
+  output_dir: "make-model/experiments/koelectra_small_sliding_single_test"
 
 data:
   file_path: "make-model/data/interim/train_final.csv"
@@ -17,7 +17,7 @@ data:
 predict:
   test_path: "make-model/data/raw/test.csv"
   submission_dir: "make-model/experiments/temp_submission"
-  submission_file: "submission_koelectra.csv"
+  submission_file: "submission_koelectra_test.csv"
 
 model:
   name: "monologg/koelectra-small-v3-discriminator"

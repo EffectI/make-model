@@ -45,7 +45,7 @@ def main(args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument('--config', type=str, default='make-model/config/roberta.yaml', help='Path to config file')
+    parser.add_argument('--config', type=str, default='make-model/config/koelectra.yaml', help='Path to config file')
     args = parser.parse_args()
     
     if torch.cuda.is_available():
