@@ -26,7 +26,7 @@ model:
 train:
   batch_size: 32
   epochs: 10
-  learning_rate: 5.0e-5 
+  learning_rate: 3.0e-5 
   patience: 3
   weight_decay: 0.01
   label_smoothing: 0.1

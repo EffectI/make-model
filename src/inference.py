@@ -39,17 +39,23 @@ class Predictor:
         print(f"Start Inference on {len(texts)} samples...")
         
         with torch.no_grad():
-            for batch in tqdm(dataloader):
-                input_ids = batch['input_ids'].to(self.device)
-                attention_mask = batch['attention_mask'].to(self.device)
-                
-                outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
-                logits = outputs.logits
-                
-                probs = torch.nn.functional.softmax(logits, dim=-1)
-                all_probs.append(probs.cpu().numpy())
+                    for batch in tqdm(dataloader):
+                        input_ids = batch['input_ids'].to(self.device)
+                        attention_mask = batch['attention_mask'].to(self.device)
+                        
+                        outputs = self.model(input_ids=input_ids, attention_mask=attention_mask)
+                        
+                        if hasattr(outputs, "logits"):
+                            logits = outputs.logits
+                        elif isinstance(outputs, tuple):
+                            logits = outputs[0]
+                        else:
+                            logits = outputs
+                        
+                        probs = torch.nn.functional.softmax(logits, dim=-1)
+                        all_probs.append(probs.cpu().numpy())
 
         all_probs = np.concatenate(all_probs, axis=0)
-        preds = np.argmax(all_probs, axis=1) # 가장 높은 확률의 인덱스 (0 or 1)
+        preds = np.argmax(all_probs, axis=1)
         
         return preds, all_probs
