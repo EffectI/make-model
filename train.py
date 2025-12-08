@@ -27,7 +27,7 @@ def main(args):
     # 5. Initialize Trainer
     trainer = get_trainer(model, tokenizer, train_ds, val_ds, cfg)
 
-    # 6. Train6
+    # 6. Train
     trainer.train()
 
     # 7. Save & Evaluate

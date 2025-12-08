@@ -18,6 +18,7 @@ def set_seeds(seed=42):
 
 
 def compute_metrics(p):
+    print(f"\n[Raw Logits Preview] \n{p.predictions[:5]}")
     preds = p.predictions
     labels = p.label_ids
 
