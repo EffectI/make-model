@@ -31,19 +31,19 @@ def model_init():
     return AutoModelForSequenceClassification.from_pretrained(MODEL_NAME, num_labels=2)
 
 def objective(trial):
-    learning_rate = trial.suggest_float("learning_rate", 1e-5, 5e-5, log=True)
-    num_train_epochs = trial.suggest_int("num_train_epochs", 3, 5)
-    weight_decay = trial.suggest_float("weight_decay", 0.0, 0.1)
-    batch_size = trial.suggest_categorical("batch_size", [16, 32])
+    learning_rate = trial.suggest_float("learning_rate", 1e-3, 4e-5, log=True)
+    #num_train_epochs = trial.suggest_int("num_train_epochs", 3, 5)
+    #weight_decay = trial.suggest_float("weight_decay", 0.0, 0.1)
+    #batch_size = trial.suggest_categorical("batch_size", [16, 32])
 
 
     training_args = TrainingArguments(
         output_dir=f"{base_cfg['project']['output_dir']}/trial_{trial.number}",
         learning_rate=learning_rate,
-        per_device_train_batch_size=batch_size,
-        per_device_eval_batch_size=batch_size,
-        num_train_epochs=num_train_epochs,
-        weight_decay=weight_decay,
+        #per_device_train_batch_size=batch_size,
+        #per_device_eval_batch_size=batch_size,
+        #num_train_epochs=num_train_epochs,
+        #weight_decay=weight_decay,
         evaluation_strategy="epoch",
         save_strategy="no",
         logging_steps=50,
