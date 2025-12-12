@@ -10,7 +10,7 @@ BASE_DIR = 'make-model/data/interim/'
 INPUT_FILENAME = 'clean_train_balanced.csv'
 OUTPUT_FILENAME = 'clean_train_balanced_under4000.csv' # 저장할 파일명
 MODEL_NAME = "monologg/koelectra-small-v3-discriminator"
-MAX_TOKEN_LIMIT = 4000  # 제거 기준 (이 값보다 크면 삭제)
+MAX_TOKEN_LIMIT = 4000  
 
 def main():
     print("데이터 길이 필터링(Outlier Removal) 시작...")

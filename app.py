@@ -8,7 +8,7 @@ import numpy as np
 # 1. 설정
 # ---------------------------------------------------------
 # checkpoint 폴더 지정
-MODEL_PATH = "make-model/experiments/koelectra_small_sliding_single_test" 
+MODEL_PATH = "experiments/koelectra_small_sliding_single_test" 
 LABELS = {0: "Human (사람)", 1: "AI Generated (인공지능)"}
 
 # ---------------------------------------------------------
