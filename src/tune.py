@@ -51,7 +51,7 @@ def objective(trial):
         per_device_eval_batch_size=per_device_batch_size,
         num_train_epochs=num_train_epochs,
         
-        evaluation_strategy="epoch", 
+        eval_strategy="epoch", 
         save_strategy="epoch",       
         load_best_model_at_end=True,  
         metric_for_best_model="f1",

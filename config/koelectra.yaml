@@ -3,7 +3,7 @@
 project:
   name: "koelectra-sliding-single"
   seed: 42
-  output_dir: "make-model/experiments/koelectra_small_sliding_single_test"
+  output_dir: "make-model/experiments/koelectra_small_sliding_single_optuna/checkpoint-2131"
 
 data:
   file_path: "make-model/data/interim/train_final.csv"
@@ -26,8 +26,8 @@ model:
 train:
   batch_size: 32
   epochs: 10
-  learning_rate: 3.0e-5
+  learning_rate: 5.278509726144334e-05
   patience: 3
-  weight_decay: 0.01
+  weight_decay: 0.03689698583218482
   label_smoothing: 0.1
   fp16: true
